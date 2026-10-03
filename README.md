@@ -23,4 +23,5 @@ Es un mod simple, solo puede ser ejecutado por OP.
 | 1.21.1    | [Descarga](https://github.com/Alvaro842DEV/Dedsafio4-Remake/releases/download/v1.0.0%2B1.21.11-neoforge/dedsafio4remake-1.0.0+1.21.1-fabric.jar) | [Descarga](https://github.com/Alvaro842DEV/Dedsafio4-Remake/releases/download/v1.0.0%2B1.21.11-neoforge/dedsafio4remake-1.0.0+1.21.1-neoforge.jar) |
 
 LICENCIA: LGPL v3.0
-ESTE MOD **NO ESTA AFILIADO** CON EUFONIA STUDIO O DEDSAFIO 4.
+
+⚠️ ESTE MOD **NO ESTA AFILIADO** CON EUFONIA STUDIO O DEDSAFIO 4. ⚠️
