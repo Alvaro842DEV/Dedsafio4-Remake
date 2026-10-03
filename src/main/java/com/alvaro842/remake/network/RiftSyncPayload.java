@@ -5,13 +5,13 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 public record RiftSyncPayload(long startTick, long stopTick, int seed) implements CustomPacketPayload {
     public static final RiftSyncPayload NONE = new RiftSyncPayload(-1L, -1L, 0);
 
     public static final Type<RiftSyncPayload> TYPE =
-            new Type<>(Identifier.fromNamespaceAndPath(Dedsafio4Remake.MODID, "sync"));
+            new Type<>(ResourceLocation.fromNamespaceAndPath(Dedsafio4Remake.MODID, "sync"));
     public static final StreamCodec<ByteBuf, RiftSyncPayload> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG,
             RiftSyncPayload::startTick,

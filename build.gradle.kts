@@ -1,17 +1,13 @@
 plugins {
-    `java-library`
-    id("net.neoforged.moddev") version "2.0.148"
-    idea
+    id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT"
     id("com.diffplug.spotless") version "8.10.3"
 }
 
 val parchmentMinecraftVersion: String = providers.gradleProperty("parchment_minecraft_version").get()
 val parchmentMappingsVersion: String = providers.gradleProperty("parchment_mappings_version").get()
 val minecraftVersion: String = providers.gradleProperty("minecraft_version").get()
-val minecraftVersionRange: String = providers.gradleProperty("minecraft_version_range").get()
-val neoVersion: String = providers.gradleProperty("neo_version").get()
-val neoVersionRange: String = providers.gradleProperty("neo_version_range").get()
-val loaderVersionRange: String = providers.gradleProperty("loader_version_range").get()
+val fabricLoaderVersion: String = providers.gradleProperty("fabric_loader_version").get()
+val fabricApiVersion: String = providers.gradleProperty("fabric_api_version").get()
 val modId: String = providers.gradleProperty("mod_id").get()
 val modName: String = providers.gradleProperty("mod_name").get()
 val modLicense: String = providers.gradleProperty("mod_license").get()
@@ -20,11 +16,7 @@ val modGroupId: String = providers.gradleProperty("mod_group_id").get()
 val modAuthors: String = providers.gradleProperty("mod_authors").get()
 val modDescription: String = providers.gradleProperty("mod_description").get()
 
-tasks.named<Wrapper>("wrapper") {
-    distributionType = Wrapper.DistributionType.BIN
-}
-
-version = modVersion
+version = "$modVersion+$minecraftVersion-fabric"
 group = modGroupId
 
 base {
@@ -37,58 +29,40 @@ java {
     }
 }
 
-neoForge {
-    version = neoVersion
-
-    parchment {
-        mappingsVersion = parchmentMappingsVersion
-        minecraftVersion = parchmentMinecraftVersion
-    }
-
-    mods {
-        create(modId) {
-            sourceSet(sourceSets.main.get())
-        }
-    }
+repositories {
+    maven("https://maven.parchmentmc.org")
 }
 
-val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata") {
+dependencies {
+    minecraft("com.mojang:minecraft:$minecraftVersion")
+    mappings(loom.layered {
+        officialMojangMappings()
+        parchment("org.parchmentmc.data:parchment-$parchmentMinecraftVersion:$parchmentMappingsVersion@zip")
+    })
+    modImplementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
+    modImplementation("net.fabricmc.fabric-api:fabric-api:$fabricApiVersion")
+}
+
+tasks.processResources {
     val replaceProperties = mapOf(
-        "minecraft_version_range" to minecraftVersionRange,
-        "neo_version_range" to neoVersionRange,
-        "loader_version_range" to loaderVersionRange,
         "mod_id" to modId,
         "mod_name" to modName,
         "mod_license" to modLicense,
         "mod_version" to modVersion,
         "mod_authors" to modAuthors,
         "mod_description" to modDescription,
+        "minecraft_version" to minecraftVersion,
+        "fabric_loader_version" to fabricLoaderVersion,
     )
-
     inputs.properties(replaceProperties)
-    expand(replaceProperties)
-    from("src/main/templates")
-    into(layout.buildDirectory.dir("generated/sources/modMetadata"))
-}
-
-sourceSets {
-    main {
-        resources.srcDir(generateModMetadata)
+    filesMatching("fabric.mod.json") {
+        expand(replaceProperties)
     }
 }
-
-neoForge.ideSyncTask(generateModMetadata)
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    options.compilerArgs.addAll(listOf("-Xlint:all", "-Xlint:-processing", "-Xlint:-serial"))
-}
-
-idea {
-    module {
-        isDownloadSources = true
-        isDownloadJavadoc = true
-    }
+    options.release.set(21)
 }
 
 spotless {
