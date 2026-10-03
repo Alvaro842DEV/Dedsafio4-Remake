@@ -1,82 +1,57 @@
 package com.alvaro842.remake.client;
 
-import com.alvaro842.remake.Dedsafio4Remake;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.pipeline.BlendFunction;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.resources.Identifier;
+import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.material.FogType;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import net.neoforged.neoforge.client.event.ViewportEvent;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.joml.Vector4f;
+import org.lwjgl.opengl.GL11;
 
 public final class RiftSkyRenderer {
-    static final RenderPipeline PIPELINE = RenderPipeline.builder(RenderPipelines.MATRICES_PROJECTION_SNIPPET)
-            .withLocation(Identifier.fromNamespaceAndPath(Dedsafio4Remake.MODID, "pipeline/rift_sky"))
-            .withVertexShader(Identifier.fromNamespaceAndPath(Dedsafio4Remake.MODID, "core/rift_sky"))
-            .withFragmentShader(Identifier.fromNamespaceAndPath(Dedsafio4Remake.MODID, "core/rift_sky"))
-            .withBlend(BlendFunction.TRANSLUCENT)
-            .withDepthWrite(false)
-            .withCull(false)
-            .withVertexFormat(DefaultVertexFormat.POSITION, VertexFormat.Mode.QUADS)
-            .build();
+    static ShaderInstance shader;
 
-    private static final int CUBE_INDEX_COUNT = 36;
     private static final float FOG_R = 0.32F, FOG_G = 0.02F, FOG_B = 0.04F;
 
-    private static final Vector4f TIMING = new Vector4f();
-    private static final Vector3f EXTRA = new Vector3f();
-    private static final Matrix4f IDENTITY = new Matrix4f();
-    private static GpuBuffer cube;
+    private static VertexBuffer cube;
 
     private RiftSkyRenderer() {}
 
-    static void renderAfterOpaqueBlocks(RenderLevelStageEvent.AfterOpaqueBlocks event) {
+    public static void renderAfterOpaqueBlocks(Matrix4f modelViewMatrix, Matrix4f projectionMatrix) {
+        if (shader == null) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (skyHidden(minecraft)) return;
-        if (!ClientRiftState.update(minecraft.getDeltaTracker().getGameTimeDeltaPartialTick(false))) return;
+        if (!ClientRiftState.update(minecraft.getTimer().getGameTimeDeltaPartialTick(false))) return;
 
-        TIMING.set(ClientRiftState.seconds, ClientRiftState.spread, ClientRiftState.line, ClientRiftState.open);
-        EXTRA.set(ClientRiftState.fade, ClientRiftState.seed, ClientRiftState.sweep);
-        GpuBufferSlice transforms =
-                RenderSystem.getDynamicUniforms().writeTransform(event.getModelViewMatrix(), TIMING, EXTRA, IDENTITY);
+        RenderSystem.setShaderColor(
+                ClientRiftState.seconds, ClientRiftState.spread, ClientRiftState.line, ClientRiftState.open);
+        shader.safeGetUniform("ModelOffset").set(ClientRiftState.fade, ClientRiftState.seed, ClientRiftState.sweep);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthFunc(GL11.GL_LEQUAL);
+        RenderSystem.depthMask(false);
+        RenderSystem.disableCull();
 
-        RenderSystem.AutoStorageIndexBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
-        GpuBuffer indexBuffer = indices.getBuffer(CUBE_INDEX_COUNT);
-        RenderTarget target = minecraft.getMainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice()
-                .createCommandEncoder()
-                .createRenderPass(
-                        () -> "Cielo",
-                        target.getColorTextureView(),
-                        OptionalInt.empty(),
-                        target.getDepthTextureView(),
-                        OptionalDouble.empty())) {
-            pass.setPipeline(PIPELINE);
-            RenderSystem.bindDefaultUniforms(pass);
-            pass.setUniform("DynamicTransforms", transforms);
-            pass.setVertexBuffer(0, cube());
-            pass.setIndexBuffer(indexBuffer, indices.type());
-            pass.drawIndexed(0, 0, CUBE_INDEX_COUNT, 1);
-        }
+        VertexBuffer buffer = cube();
+        buffer.bind();
+        buffer.drawWithShader(modelViewMatrix, projectionMatrix, shader);
+        VertexBuffer.unbind();
+
+        RenderSystem.enableCull();
+        RenderSystem.depthMask(true);
+        RenderSystem.disableBlend();
+        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
     }
 
     // Las mismas condiciones con las que vanilla no renderiza el cielo
@@ -87,46 +62,48 @@ public final class RiftSkyRenderer {
                 && (living.hasEffect(MobEffects.BLINDNESS) || living.hasEffect(MobEffects.DARKNESS));
     }
 
-    static void tintFog(ViewportEvent.ComputeFogColor event) {
-        if (event.getCamera().getFluidInCamera() != FogType.NONE) return;
-        float amount = ClientRiftState.coverage((float) event.getPartialTick());
+    public static void tintFog(Camera camera, float partialTick, Vector3f color) {
+        if (camera.getFluidInCamera() != FogType.NONE) return;
+        float amount = ClientRiftState.coverage(partialTick);
         if (amount <= 0.0F) return;
-        event.setRed(Mth.lerp(amount, event.getRed(), FOG_R));
-        event.setGreen(Mth.lerp(amount, event.getGreen(), FOG_G));
-        event.setBlue(Mth.lerp(amount, event.getBlue(), FOG_B));
+        color.set(Mth.lerp(amount, color.x, FOG_R), Mth.lerp(amount, color.y, FOG_G), Mth.lerp(amount, color.z, FOG_B));
     }
 
-    public static int tintClouds(int argb) {
-        float amount = ClientRiftState.coverage(
-                Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(false));
-        if (amount <= 0.0F) return argb;
-        int a = Math.round(((argb >>> 24) & 0xFF) * (1.0F - amount));
-        int r = Math.round(Mth.lerp(amount, (argb >> 16) & 0xFF, 120));
-        int g = Math.round(Mth.lerp(amount, (argb >> 8) & 0xFF, 8));
-        int b = Math.round(Mth.lerp(amount, argb & 0xFF, 16));
-        return a << 24 | r << 16 | g << 8 | b;
+    public static Vec3 tintClouds(Vec3 color) {
+        float amount = cloudAmount();
+        if (amount <= 0.0F) return color;
+        return new Vec3(
+                Mth.lerp(amount, color.x, 120 / 255.0),
+                Mth.lerp(amount, color.y, 8 / 255.0),
+                Mth.lerp(amount, color.z, 16 / 255.0));
     }
 
-    private static GpuBuffer cube() {
+    public static float cloudAlpha() {
+        return 1.0F - cloudAmount();
+    }
+
+    private static float cloudAmount() {
+        return ClientRiftState.coverage(Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false));
+    }
+
+    private static VertexBuffer cube() {
         if (cube != null) return cube;
-        VertexFormat format = DefaultVertexFormat.POSITION;
-        try (ByteBufferBuilder bytes = ByteBufferBuilder.exactlySized(24 * format.getVertexSize())) {
-            BufferBuilder builder = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, format);
-            float s = 10.0F;
-            float[][] faces = {
-                {-s, s, -s, s, s, -s, s, s, s, -s, s, s},
-                {-s, -s, -s, -s, -s, s, s, -s, s, s, -s, -s},
-                {s, -s, -s, s, -s, s, s, s, s, s, s, -s},
-                {-s, -s, -s, -s, s, -s, -s, s, s, -s, -s, s},
-                {-s, -s, s, -s, s, s, s, s, s, s, -s, s},
-                {-s, -s, -s, s, -s, -s, s, s, -s, -s, s, -s}
-            };
-            for (float[] face : faces)
-                for (int i = 0; i < face.length; i += 3) builder.addVertex(face[i], face[i + 1], face[i + 2]);
-            try (MeshData mesh = builder.buildOrThrow()) {
-                cube = RenderSystem.getDevice().createBuffer(null, GpuBuffer.USAGE_VERTEX, mesh.vertexBuffer());
-            }
-        }
+        BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION);
+        float s = 10.0F;
+        float[][] faces = {
+            {-s, s, -s, s, s, -s, s, s, s, -s, s, s},
+            {-s, -s, -s, -s, -s, s, s, -s, s, s, -s, -s},
+            {s, -s, -s, s, -s, s, s, s, s, s, s, -s},
+            {-s, -s, -s, -s, s, -s, -s, s, s, -s, -s, s},
+            {-s, -s, s, -s, s, s, s, s, s, s, -s, s},
+            {-s, -s, -s, s, -s, -s, s, s, -s, -s, s, -s}
+        };
+        for (float[] face : faces)
+            for (int i = 0; i < face.length; i += 3) builder.addVertex(face[i], face[i + 1], face[i + 2]);
+        cube = new VertexBuffer(VertexBuffer.Usage.STATIC);
+        cube.bind();
+        cube.upload(builder.buildOrThrow());
+        VertexBuffer.unbind();
         return cube;
     }
 }

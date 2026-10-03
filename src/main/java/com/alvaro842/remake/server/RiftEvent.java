@@ -19,7 +19,7 @@ public final class RiftEvent {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("dedsafio")
-                .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                .requires(source -> source.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("start").executes(ctx -> start(ctx.getSource(), false)))
                 .then(Commands.literal("reset").executes(ctx -> start(ctx.getSource(), true)))
                 .then(Commands.literal("stop").executes(ctx -> stop(ctx.getSource()))));

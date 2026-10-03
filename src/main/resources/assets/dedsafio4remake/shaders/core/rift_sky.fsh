@@ -1,6 +1,7 @@
-#version 330
+#version 150
 
-#moj_import <minecraft:dynamictransforms.glsl>
+uniform vec4 ColorModulator;
+uniform vec3 ModelOffset;
 
 in vec3 skyDir;
 

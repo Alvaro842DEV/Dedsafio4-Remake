@@ -24,7 +24,7 @@ tasks.named<Wrapper>("wrapper") {
     distributionType = Wrapper.DistributionType.BIN
 }
 
-version = modVersion
+version = "$modVersion+$minecraftVersion-neoforge"
 group = modGroupId
 
 base {

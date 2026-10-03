@@ -1,5 +1,6 @@
 package com.alvaro842.remake;
 
+import com.alvaro842.remake.client.ClientRiftState;
 import com.alvaro842.remake.network.RiftSyncPayload;
 import com.alvaro842.remake.server.RiftEvent;
 import net.minecraft.server.level.ServerPlayer;
@@ -28,6 +29,9 @@ public final class Dedsafio4Remake {
     private static void registerPayloads(RegisterPayloadHandlersEvent event) {
         event.registrar(MODID)
                 .versioned(PROTOCOL_VERSION)
-                .playToClient(RiftSyncPayload.TYPE, RiftSyncPayload.STREAM_CODEC);
+                .playToClient(
+                        RiftSyncPayload.TYPE,
+                        RiftSyncPayload.STREAM_CODEC,
+                        (payload, context) -> ClientRiftState.accept(payload));
     }
 }
